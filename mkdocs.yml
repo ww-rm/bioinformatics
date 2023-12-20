@@ -1,0 +1,40 @@
+site_name: 生信小站
+# site_url: ""
+site_author: BGIer
+site_description: "这里是生信小站, 记录一些日常心得与好用的小脚本~"
+
+repo_url: https://github.com/ww-rm/bioinformatics/
+
+edit_uri: blob/main/docs/
+
+theme:
+  name: readthedocs
+  locale: zh_CN
+
+nav:
+  - "主页": "index.md"
+
+markdown_extensions:
+  - toc:
+      permalink: true
+
+plugins:
+  - search:
+      lang: zh
+  - mkdocstrings:
+      handlers:
+        python:
+          import:
+            - url: https://docs.python.org/3/objects.inv
+              domains: [py, std]
+          options:
+            show_root_heading: true
+            show_root_full_path: true
+            show_root_members_full_path: true
+            show_object_full_path: true
+            show_source: false
+            merge_init_into_class: true
+            members_order: source
+
+            docstring_options:
+              ignore_init_summary: true
