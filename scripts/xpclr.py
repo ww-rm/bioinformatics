@@ -1,11 +1,12 @@
 import gzip
+import re
 import sys
 from argparse import ArgumentError, ArgumentParser
 from concurrent import futures
 from pathlib import Path
 from typing import *
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"
 
 
 __doc__ = f"""XPCLR shell 脚本生成工具.
@@ -369,7 +370,7 @@ class XPCLR:
             name1 = ".".join(g1.name[:-len(self.GENO_SUFFIX)].split(".")[1:])
             name2 = ".".join(g2.name[:-len(self.GENO_SUFFIX)].split(".")[1:])
             chr_interval = m.name.split(".")[0]
-            chrid = chr_interval.split("-")[0]
+            chrnum = int(re.search("\d+", chr_interval.split("-")[0]).group())  # XPCLR need integer chrom number
 
             # NOTE: XPCLR Only accepts filenames in current directory, so link geno and map file to current directory
             _link = xpclr_dir.joinpath(g1.name)
@@ -385,7 +386,7 @@ class XPCLR:
             xpclr_path = xpclr_dir.joinpath(f"{chr_interval}.{name1}_{name2}")  # Suffix ".xpclr.txt" will be auto added by XPCLR
 
             with xpclr_dir.joinpath(f"{chr_interval}.{name1}_{name2}.xpclr.sh").open("w", encoding="utf8") as f:
-                print(f"{self.xpclr} -xpclr {g1.name} {g2.name} {m.name} {xpclr_path.name} -w1 0.005 100 2000 {chrid} -p0 0.7", file=f)  # Only accept filename, not filepath
+                print(f"{self.xpclr} -xpclr {g1.name} {g2.name} {m.name} {xpclr_path.name} -w1 0.005 100 2000 {chrnum} -p0 0.7", file=f)  # Only accept filename, not filepath
 
             xpclr_paths.append(xpclr_path)
 
