@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import *
 import re
 
-__date__ = "2024.01.06"
+__date__ = "2024.01.07"
 
 
 def get_chrpos_from_vcfgz(vcfgz_path: Path) -> Dict[str, List[str]]:
@@ -192,11 +192,11 @@ if __name__ == "__main__":
         map_path2 = genomap_dir.joinpath(f"{name2}.map")
 
         with genomap_dir.joinpath(f"{name1}.genomap.sh").open("w", encoding="utf8") as f:
-            print(f"{perl} {perl_script} {p1} | sed 's/\// /g' | sed 's/\./9/g' > {geno_path1}", file=f)
+            print(f"{perl} {perl_script} {p1} | sed 's/|/\//g' | sed 's/\// /g' | sed 's/\./9/g' > {geno_path1}", file=f)
             print(f"""{bcftools} query -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' {p1} | awk '{{print $1"_"$2"\\t9\\t"158.5/204289203*$2"\\t"$2"\\t"$3"\\t"$4}}' > {map_path1}""", file=f)
 
         with genomap_dir.joinpath(f"{name2}.genomap.sh").open("w", encoding="utf8") as f:
-            print(f"{perl} {perl_script} {p2} | sed 's/\// /g' | sed 's/\./9/g' > {geno_path2}", file=f)
+            print(f"{perl} {perl_script} {p2} | sed 's/|/\//g' | sed 's/\// /g' | sed 's/\./9/g' > {geno_path2}", file=f)
             print(f"""{bcftools} query -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' {p2} | awk '{{print $1"_"$2"\\t9\\t"158.5/204289203*$2"\\t"$2"\\t"$3"\\t"$4}}'> {map_path2}""", file=f)
 
         pop1_geno_paths.append(geno_path1)
