@@ -16,6 +16,8 @@ bcftools view sativa332.indel.Lsat_1_v5_gn_7_15020.hard.vcf -Oz -o sativa332.ind
 
 ## 建立索引
 
+只能对压缩后的vcf文件建立索引
+
 ```bash
 bcftools index -t sativa332.indel.Lsat_1_v5_gn_7_15020.hard.vcf.gz
 ```
@@ -32,7 +34,7 @@ tabix -p vcf view.vcf.gz
 
 ---
 
-上述命令二选一, 均可完成压缩.
+上述命令任选其一, 均可完成建索引.
 
 ## 提取变异
 
@@ -55,7 +57,7 @@ bcftools view -S keep.list test.vcf > sub_indv.vcf
 
 ---
 
-上述命令二选一均可完成
+上述命令任选其一即可
 
 ## 提取样品
 
@@ -97,9 +99,11 @@ vcftools --gzvcf in.vcf.gz --recode --recode-INFO-all --stdout --keep id.txt  > 
 
 ---
 
-选择一个即可完成,较多样品时推荐选择 `vcftools`, 可以直接提供 list
+选择一个即可完成
 
 ## 去除样品
+
+适用于去除少数样品
 
 ```bash
 bcftools view example.vcf.gz -s ^NA00001,NA00002  -o subset.vcf 
@@ -107,6 +111,10 @@ bcftools view example.vcf.gz -s ^NA00001,NA00002  -o subset.vcf
 
 - `-s` `^` 后接需要去除的样品名, `,` 分割
 - `-o` 输出文件名
+
+---
+
+适用于较多样品
 
 ```bash
 vcftools --gzvcf in.vcf.gz --recode --recode-INFO-all --stdout  --remove id.txt  > out.vcf.gz
@@ -118,8 +126,6 @@ vcftools --gzvcf in.vcf.gz --recode --recode-INFO-all --stdout  --remove id.txt 
 - `--stdout`: 配合后面的管道函数，如果输出文件是压缩文件 `--stdout > out.vcf.gz` (也可以不压缩), 不压缩时，可以直接 `--out out` 此处第一个 `out` 是命令，第二个 `out` 是文件名 (也可以 `--stout > out.vcf`)
 - `--remove`: 所需要的样品名列表
 
----
-
 ## 修改样品名
 
 [bcftools的常用命令](https://www.jianshu.com/p/8ddee965e412)
@@ -128,10 +134,7 @@ vcftools --gzvcf in.vcf.gz --recode --recode-INFO-all --stdout  --remove id.txt 
 bcftools reheader --samples sub.list -o output.vcf.gz input.vcf.gz
 ```
 
-- `--samples`: 内容为`oldname newname`,可有多行(修改多个样品名)
-
-
----
+- `--samples`: 内容为`oldname\tnewname`, 可有多行 (修改多个样品名)
 
 ## MAF 过滤
 
@@ -165,8 +168,8 @@ bcftools annotate --rename-chrs NewChrName.txt old.xxx.vcf.gz -Oz -o new.xxx.gz
 ```
 
 - `rename-chr`: 接新老名称的对应关系,其中NewChrName.txt文件中第一列为旧ID，第二列为对应的新ID
-- `-Oz`: 指定输出文件为压缩格式 `gz`.
-- `-o`: 指定输出文件名。
+- `-Oz`: 指定输出文件为压缩格式 `gz`
+- `-o`: 指定输出文件名
 
 ## 按染色体拆分vcf
 
@@ -225,8 +228,6 @@ bcftools query -l example.vcf.gz >example.id.list
 ```
 
 - `-l`: 后接需要查询的vcf文件
-
----
 
 ## 提取变异信息
 
