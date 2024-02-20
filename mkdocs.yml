@@ -13,6 +13,7 @@ theme:
 
 nav:
   - "主页": "index.md"
+  - "ff_vcf_basic.md"
 
 markdown_extensions:
   - toc:
