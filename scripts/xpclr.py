@@ -1,13 +1,13 @@
 import gzip
+import logging
 import re
 import sys
-from argparse import ArgumentError, ArgumentParser
+from argparse import ArgumentParser
 from concurrent import futures
 from pathlib import Path
 from typing import *
 
-__version__ = "0.9.1"
-
+__version__ = "0.9.6"
 
 __doc__ = f"""XPCLR shell 脚本生成工具.
 
@@ -41,13 +41,25 @@ __doc__ = f"""XPCLR shell 脚本生成工具.
 运行参数:
     下列参数指定生成哪些步骤的脚本, 可以组合使用.
 
-    --run-all: 生成所有脚本.
     --run-filter: 生成 filter 操作脚本.
     --run-overlap: 生成 overlap 操作脚本.
     --run-split: 生成 split 操作脚本.
     --run-genomap: 生成 geno 和 map 操作脚本.
     --run-xpclr: 生成 xpclr 操作脚本.
 """
+
+# 全局 logger
+logger = logging.getLogger("XPCLRLogger")
+_fmter = logging.Formatter("{asctime} - {levelname} - {filename} - {lineno} - {message}", "%Y-%m-%d %H:%M:%S", "{")
+
+_err_hdler = logging.StreamHandler(sys.stderr)
+_err_hdler.setLevel(logging.WARNING)
+_err_hdler.setFormatter(_fmter)
+
+_out_hdler = logging.StreamHandler(sys.stdout)
+_out_hdler.setLevel(logging.DEBUG)
+_out_hdler.setFormatter(_fmter)
+_out_hdler.addFilter(lambda r: r.levelno <= logging.INFO)
 
 
 def get_chrpos_from_vcfgz(vcfgz_path: Path) -> Dict[str, List[str]]:
@@ -134,7 +146,7 @@ class XPCLR:
     def find_file_pairs(self, folder: Path, pattern: str) -> Tuple[List[Path], List[Path]]:
         """Return sorted file pairs."""
 
-        print(f"Finding {pattern} files in {folder}")
+        logger.info("在目录 %s 寻找文件(%s)", folder.resolve(), pattern)
 
         pop1_paths: List[Path] = []
         pop2_paths: List[Path] = []
@@ -147,22 +159,35 @@ class XPCLR:
             elif self.pop2 in p.name:
                 pop2_paths.append(p)
             else:
-                raise ValueError(f"Unknown file found: {p}")
+                logger.error("发现了未知 pop 类型文件: %s, 不属于 {%s, %s}", p.resolve(), self.pop1, self.pop2)
+                exit(1)
 
         if len(pop1_paths) != len(pop2_paths):
-            raise ValueError(f"{pattern} files count not equal, pop1: {len(pop1_paths)}, pop2: {len(pop2_paths)}")
+            logger.error("文件数不相等")
+            logger.error("已发现的 pop1(%s) 文件, 共 %d 个", self.pop1, len(pop1_paths))
+            for p in pop1_paths:
+                logger.error("%s", p.resolve())
+            logger.error("已发现的 pop2(%s) 文件, 共 %d 个", self.pop2, len(pop2_paths))
+            for p in pop2_paths:
+                logger.error("%s", p.resolve())
+            exit(1)
 
         if len(pop1_paths) <= 0:
-            raise ValueError(f"{pattern} files not found in {folder}")
+            logger.error("未能在目录 %s 下发现任何文件(%s)", folder.resolve(), pattern)
+            exit(1)
 
         pop1_paths.sort()
         pop2_paths.sort()
 
-        print("="*10, f"Found {len(pop1_paths)} pop1 {pattern} files", "="*10)
-        print(*pop1_paths, sep="\n")
+        logger.info("已发现 %d 个 pop1(%s) 文件(%s)", len(pop1_paths), self.pop1, pattern)
+        for p in pop1_paths:
+            logger.info("%s", p.resolve())
 
-        print("="*10, f"Found {len(pop2_paths)} pop2 {pattern} files", "="*10)
-        print(*pop2_paths, sep="\n")
+        logger.info("已发现 %d 个 pop2(%s) 文件(%s)", len(pop2_paths), self.pop2, pattern)
+        for p in pop2_paths:
+            logger.info("%s", p.resolve())
+
+        return pop1_paths, pop2_paths
 
     def _generate_script_filter(self, out_dir: Path, in_path: Path) -> Path:
         name = in_path.name[:-len(self.DATA_SUFFIX)]
@@ -180,11 +205,11 @@ class XPCLR:
 
     def generate_scripts_filter(self, pop1_data_paths: List[Path] = None, pop2_data_paths: List[Path] = None) -> Tuple[List[Path], List[Path]]:
         if pop1_data_paths is None or pop2_data_paths is None:
-            pop1_data_paths, pop2_data_paths = self.find_file_pairs(self.data_dir, self.DATA_SUFFIX)
+            pop1_data_paths, pop2_data_paths = self.find_file_pairs(self.data_dir, "*" + self.DATA_SUFFIX)
 
         filter_dir = self.filter_dir
         filter_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Output filter scripts to {filter_dir}")
+        print("在目录 %s 生成 filter 步骤脚本", filter_dir.resolve())
 
         pop1_filter_paths: List[Path] = []
         pop2_filter_paths: List[Path] = []
@@ -195,15 +220,22 @@ class XPCLR:
             path = self._generate_script_filter(filter_dir, p2)
             pop2_filter_paths.append(path)
 
+        logger.info("已生成 pop1(%s) %d 个 filter 步骤脚本", self.pop1, len(pop1_filter_paths))
+        for p in pop1_filter_paths:
+            logger.info("%s", p.resolve())
+        logger.info("已生成 pop2(%s) %d 个 filter 步骤脚本", self.pop2, len(pop2_filter_paths))
+        for p in pop2_filter_paths:
+            logger.info("%s", p.resolve())
+
         return pop1_filter_paths, pop2_filter_paths
 
     def generate_scripts_overlap(self, pop1_filter_paths: List[Path] = None, pop2_filter_paths: List[Path] = None) -> Tuple[List[Path], List[Path]]:
         if pop1_filter_paths is None or pop2_filter_paths is None:
-            pop1_filter_paths, pop2_filter_paths = self.find_file_pairs(self.filter_dir, self.FILTER_SUFFIX)
+            pop1_filter_paths, pop2_filter_paths = self.find_file_pairs(self.filter_dir, "*" + self.FILTER_SUFFIX)
 
         overlap_dir = self.overlap_dir
         overlap_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Output overlap scripts to {overlap_dir}")
+        logger.info("在目录 %s 下生成 overlap 步骤脚本", overlap_dir.resolve())
 
         pop1_overlap_paths: List[Path] = []
         pop2_overlap_paths: List[Path] = []
@@ -239,13 +271,20 @@ class XPCLR:
             pop1_overlap_paths.append(overlap_path1)
             pop2_overlap_paths.append(overlap_path2)
 
+        logger.info("已生成 pop1(%s) %d 个 overlap 步骤脚本", self.pop1, len(pop1_overlap_paths))
+        for p in pop1_overlap_paths:
+            logger.info("%s", p.resolve())
+        logger.info("已生成 pop2(%s) %d 个 overlap 步骤脚本", self.pop2, len(pop2_overlap_paths))
+        for p in pop2_overlap_paths:
+            logger.info("%s", p.resolve())
+
         return pop1_overlap_paths, pop2_overlap_paths
 
     def _generate_script_split(self, out_dir: Path, in_path: Path, chrid: str, positions: List[int], interval: int) -> List[Path]:
         name = in_path.name[:-len(self.OVERLAP_SUFFIX)]
 
         split_paths = []
-        with out_dir.joinpath(f"{chrid}.{name}.split.sh").open("w", encoding="utf8") as f:
+        with out_dir.joinpath(f"{'chr' + chrid if chrid[0].isdigit() else chrid}.{name}.split.sh").open("w", encoding="utf8") as f:
             for lstart in range(0, len(positions), interval):
                 lend = min(lstart + interval - 1, len(positions) - 1)
                 pos_start, pos_end = positions[lstart], positions[lend]
@@ -264,19 +303,21 @@ class XPCLR:
 
     def generate_scripts_split(self, pop1_overlap_paths: List[Path] = None, pop2_overlap_paths: List[Path] = None) -> Tuple[List[Path], List[Path]]:
         if pop1_overlap_paths is None or pop2_overlap_paths is None:
-            pop1_overlap_paths, pop2_overlap_paths = self.find_file_pairs(self.overlap_dir, self.OVERLAP_SUFFIX)
+            pop1_overlap_paths, pop2_overlap_paths = self.find_file_pairs(self.overlap_dir, "*" + self.OVERLAP_SUFFIX)
 
         chrid_list = Path(self.args.chrid_list).read_text().strip().split("\n")
         interval = int(self.args.interval)
 
         split_dir = self.split_dir
         split_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Output split scripts to {split_dir}")
+        logger.info("在目录 %s 下生成 split 步骤脚本", split_dir.resolve())
+        logger.info("已读取 chrid_list 共 %d 条染色体, %s", len(chrid_list), chrid_list)
 
         pop1_split_paths: List[Path] = []
         pop2_split_paths: List[Path] = []
 
         # extract positions from vcfgz files
+        logger.info("使用多进程从 *%s 文件中读取位置信息", self.OVERLAP_SUFFIX)
         chrpos1 = get_chrpos_from_vcfgz_files(pop1_overlap_paths)
         chrpos2 = get_chrpos_from_vcfgz_files(pop2_overlap_paths)
 
@@ -286,20 +327,23 @@ class XPCLR:
         pop1_overlap_paths: List[Path] = []
         pop2_overlap_paths: List[Path] = []
 
-        if len(pop1_overlap_paths) <= 1:
-            pop1_overlap_paths = pop1_overlap_paths * len(chrid_list)
-            pop2_overlap_paths = pop2_overlap_paths * len(chrid_list)
+        if len(_pop1_overlap_paths) <= 1:
+            logger.info("检测到文件数小于等于 1, 按照无染色体切分模式生成 split 脚本.")
+            pop1_overlap_paths = _pop1_overlap_paths * len(chrid_list)
+            pop2_overlap_paths = _pop2_overlap_paths * len(chrid_list)
         else:
             if len(_pop1_overlap_paths) > len(chrid_list):
-                print(f"WARNING: {self.OVERLAP_SUFFIX} files {len(_pop1_overlap_paths)} more than chrom list row count {len(chrid_list)}", file=sys.stderr)
+                logger.warning("发现的文件数 %d 大于染色体数 %d", len(_pop1_overlap_paths), len(chrid_list))
 
             for chrid in chrid_list:
                 _p1 = list(filter(lambda x: chrid in x.name, _pop1_overlap_paths))
                 _p2 = list(filter(lambda x: chrid in x.name, _pop2_overlap_paths))
-                if len(_p1) <= 0 or len(_p1) > 1:
-                    raise ValueError(f"{chrid} count incorrect in pop1 overlap.vcf.gz files, all pop1 files: {_pop1_overlap_paths}")
-                if len(_p2) <= 0 or len(_p2) > 1:
-                    raise ValueError(f"{chrid} count incorrect in pop2 overlap.vcf.gz files, all pop2 files: {_pop2_overlap_paths}")
+                if len(_p1) != 1:
+                    logger.error("染色体 %s 对应的 pop1(%s) 文件不唯一, %s", chrid, self.pop1, _p1)
+                    exit(1)
+                if len(_p2) != 1:
+                    logger.error("染色体 %s 对应的 pop2(%s) 文件不唯一, %s", chrid, self.pop2, _p2)
+                    exit(1)
                 pop1_overlap_paths.append(_p1[0])
                 pop2_overlap_paths.append(_p2[0])
 
@@ -310,6 +354,13 @@ class XPCLR:
             paths = self._generate_script_split(split_dir, p2, chrid, chrpos2[chrid], interval)
             pop2_split_paths.extend(paths)
 
+        logger.info("已生成 pop1(%s) %d 个 split 步骤脚本", self.pop1, len(pop1_split_paths))
+        for p in pop1_split_paths:
+            logger.info("%s", p.resolve())
+        logger.info("已生成 pop2(%s) %d 个 split 步骤脚本", self.pop2, len(pop2_split_paths))
+        for p in pop2_split_paths:
+            logger.info("%s", p.resolve())
+
         return pop1_split_paths, pop2_split_paths
 
     def _generate_script_genomap(self, out_dir: Path, in_path: Path) -> Tuple[Path, Path]:
@@ -318,7 +369,7 @@ class XPCLR:
         geno_path = out_dir.joinpath(f"{name}.geno")
         map_path = out_dir.joinpath(f"{name}.map")
 
-        with out_dir.joinpath(f"{name}.genomap.sh").open("w", encoding="utf8") as f:
+        with out_dir.joinpath(f"{'chr' + name if name[0].isdigit() else name}.genomap.sh").open("w", encoding="utf8") as f:
             print(f"{self.perl} {self.perl_script} {in_path} | sed 's/|/\//g' | sed 's/\// /g' | sed 's/\./9/g' > {geno_path}", file=f)
             print(f"""{self.bcftools} query -f '%CHROM\\t%POS\\t%REF\\t%ALT\\n' {in_path} | awk '{{print $1"_"$2"\\t9\\t"158.5/204289203*$2"\\t"$2"\\t"$3"\\t"$4}}' > {map_path}""", file=f)
 
@@ -331,11 +382,11 @@ class XPCLR:
         """
 
         if pop1_split_paths is None or pop2_split_paths is None:
-            pop1_split_paths, pop2_split_paths = self.find_file_pairs(self.split_dir, self.SPLIT_SUFFIX)
+            pop1_split_paths, pop2_split_paths = self.find_file_pairs(self.split_dir, "*" + self.SPLIT_SUFFIX)
 
         genomap_dir = self.genomap_dir
         genomap_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Output geno & map scripts to {genomap_dir}")
+        logger.info("在目录 %s 下生成 geno & map 步骤脚本", genomap_dir.resolve())
 
         pop1_geno_paths: List[Path] = []
         pop2_geno_paths: List[Path] = []
@@ -353,17 +404,29 @@ class XPCLR:
             pop2_geno_paths.append(geno_path)
             pop2_map_paths.append(map_path)
 
+        logger.info("已生成 pop1(%s) %d 个 geno & map 步骤脚本", self.pop1, len(pop1_geno_paths) + len(pop1_map_paths))
+        for p in pop1_geno_paths:
+            logger.info("%s", p.resolve())
+        for p in pop1_map_paths:
+            logger.info("%s", p.resolve())
+
+        logger.info("已生成 pop2(%s) %d 个 geno & map 步骤脚本", self.pop2, len(pop2_geno_paths) + len(pop2_map_paths))
+        for p in pop2_geno_paths:
+            logger.info("%s", p.resolve())
+        for p in pop2_map_paths:
+            logger.info("%s", p.resolve())
+
         return pop1_geno_paths, pop2_geno_paths, pop1_map_paths, pop2_map_paths
 
     def generate_scripts_xpclr(self, pop1_geno_paths: List[Path] = None, pop2_geno_paths: List[Path] = None, pop_map_paths: List[Path] = None) -> List[Path]:
         if pop1_geno_paths is None or pop2_geno_paths is None:
-            pop1_geno_paths, pop2_geno_paths = self.find_file_pairs(self.genomap_dir, self.GENO_SUFFIX)
+            pop1_geno_paths, pop2_geno_paths = self.find_file_pairs(self.genomap_dir, "*" + self.GENO_SUFFIX)
         if pop_map_paths is None:
-            pop_map_paths, _ = self.find_file_pairs(self.genomap_dir, self.MAP_SUFFIX)
+            pop_map_paths, _ = self.find_file_pairs(self.genomap_dir, "*" + self.MAP_SUFFIX)
 
         xpclr_dir = self.xpclr_dir
         xpclr_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Output XPCLR scripts to {xpclr_dir}")
+        logger.info("在目录 %s 下生成 XPCLR 脚本", xpclr_dir.resolve())
 
         xpclr_paths: List[Path] = []
         for g1, g2, m in zip(pop1_geno_paths, pop2_geno_paths, pop_map_paths):
@@ -385,10 +448,14 @@ class XPCLR:
 
             xpclr_path = xpclr_dir.joinpath(f"{chr_interval}.{name1}_{name2}")  # Suffix ".xpclr.txt" will be auto added by XPCLR
 
-            with xpclr_dir.joinpath(f"{chr_interval}.{name1}_{name2}.xpclr.sh").open("w", encoding="utf8") as f:
+            with xpclr_dir.joinpath(f"{'chr' + chr_interval if chr_interval[0].isdigit() else chr_interval}.{name1}_{name2}.xpclr.sh").open("w", encoding="utf8") as f:
                 print(f"{self.xpclr} -xpclr {g1.name} {g2.name} {m.name} {xpclr_path.name} -w1 0.005 100 2000 {chrnum} -p0 0.7", file=f)  # Only accept filename, not filepath
 
             xpclr_paths.append(xpclr_path)
+
+        logger.info("已生成 %d 个 XPCLR 步骤脚本", len(xpclr_paths))
+        for p in xpclr_paths:
+            logger.info("%s", p.resolve())
 
         return xpclr_paths
 
@@ -436,7 +503,6 @@ if __name__ == "__main__":
     parser.add_argument("--perl-script", type=Path, default="/ldfssz1/ST_EARTH/P18Z10200N0148/P18Z10200N0148_LETTUCE/final_combine/dp2-50/29.xp-clr/vcf2geno.v20200716.pl", help="用于 geno 操作的 perl 脚本, 默认为 `%(default)s`.")
     parser.add_argument("--xpclr", type=Path, default="/hwfssz1/ST_EARTH/Reference/ST_AGRIC/USER/liuxinjiang/liuxinjiang/APP/software/XPCLR/bin/XPCLR", help="XPCLR, 默认为 `%(default)s`")
 
-    parser.add_argument("--run-all", action="store_true", help="生成所有脚本.")
     parser.add_argument("--run-filter", action="store_true", help="生成 filter 操作脚本.")
     parser.add_argument("--run-overlap", action="store_true", help="生成 overlap 操作脚本.")
     parser.add_argument("--run-split", action="store_true", help="生成 split 操作脚本.")
@@ -445,16 +511,13 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.run_all:
-        args.run_filter \
-            = args.run_overlap \
-            = args.run_split \
-            = args.run_genomap \
-            = args.run_xpclr \
-            = True
+    logger.info("XPCLR 脚本开始运行, 版本 v%s", __version__)
+    logger.info("本次运行全部参数为")
+    logger.info("%s", args)
 
     if not (args.run_filter or args.run_overlap or args.run_split or args.run_genomap or args.run_xpclr):
-        raise ArgumentError(None, "No run arguments specifed, nothing to do.")
-
-    xpclr = XPCLR(args)
-    xpclr.run()
+        logger.warning("没有指定运行任何步骤, 已结束运行.")
+    else:
+        xpclr = XPCLR(args)
+        xpclr.run()
+        logger.info("已成功完成所有生成任务.")
