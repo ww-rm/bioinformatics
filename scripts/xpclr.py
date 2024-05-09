@@ -7,7 +7,7 @@ from concurrent import futures
 from pathlib import Path
 from typing import *
 
-__version__ = "0.9.6"
+__version__ = "0.9.7"
 
 __doc__ = f"""XPCLR shell 脚本生成工具.
 
@@ -50,6 +50,8 @@ __doc__ = f"""XPCLR shell 脚本生成工具.
 
 # 全局 logger
 logger = logging.getLogger("XPCLRLogger")
+logger.setLevel(logging.DEBUG)
+
 _fmter = logging.Formatter("{asctime} - {levelname} - {filename} - {lineno} - {message}", "%Y-%m-%d %H:%M:%S", "{")
 
 _err_hdler = logging.StreamHandler(sys.stderr)
@@ -60,6 +62,9 @@ _out_hdler = logging.StreamHandler(sys.stdout)
 _out_hdler.setLevel(logging.DEBUG)
 _out_hdler.setFormatter(_fmter)
 _out_hdler.addFilter(lambda r: r.levelno <= logging.INFO)
+
+logger.addHandler(_err_hdler)
+logger.addHandler(_out_hdler)
 
 
 def get_chrpos_from_vcfgz(vcfgz_path: Path) -> Dict[str, List[str]]:
